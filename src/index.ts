@@ -13,7 +13,7 @@ import {
   extractCwdCommandArgument,
   resolveTargetDirectory,
 } from "./paths.ts";
-import { forkSessionToCwd } from "./session.ts";
+import { forkCurrentSessionToCwd } from "./session.ts";
 
 const COMMANDS = ["cwd", "cd"] as const;
 const MAX_COMPLETIONS = 50;
@@ -46,7 +46,7 @@ async function changeCwd(args: string | undefined, ctx: ExtensionCommandContext)
   }
 
   await ctx.waitForIdle();
-  const forkedSessionFile = forkSessionToCwd(sourceSessionFile, targetCwd);
+  const forkedSessionFile = forkCurrentSessionToCwd(ctx.sessionManager, targetCwd);
   const result = await ctx.switchSession(forkedSessionFile, {
     withSession: async (nextCtx) => {
       nextCtx.ui.notify(`cwd: ${nextCtx.cwd}`, "info");
