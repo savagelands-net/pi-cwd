@@ -18,7 +18,31 @@ import { forkCurrentSessionToCwd } from "./session.ts";
 const COMMANDS = ["cwd", "cd"] as const;
 const MAX_COMPLETIONS = 50;
 
-async function changeCwd(args: string | undefined, ctx: ExtensionCommandContext): Promise<void> {
+async function forceTerminalRefresh(
+  ctx: ExtensionCommandContext,
+): Promise<void> {
+  if (ctx.mode !== "tui") return;
+
+  await ctx.ui.custom<void>((tui, _theme, _keybindings, done) => {
+    tui.requestRender(true);
+    done(undefined);
+    return {
+      render: () => [],
+      invalidate: () => undefined,
+    };
+  });
+}
+
+function scheduleTerminalRefresh(ctx: ExtensionCommandContext): void {
+  setTimeout(() => {
+    void forceTerminalRefresh(ctx).catch(() => undefined);
+  }, 0);
+}
+
+async function changeCwd(
+  args: string | undefined,
+  ctx: ExtensionCommandContext,
+): Promise<void> {
   const requested = (args ?? "").trim();
   if (!requested) {
     ctx.ui.notify(`cwd: ${ctx.cwd}`, "info");
@@ -46,10 +70,14 @@ async function changeCwd(args: string | undefined, ctx: ExtensionCommandContext)
   }
 
   await ctx.waitForIdle();
-  const forkedSessionFile = forkCurrentSessionToCwd(ctx.sessionManager, targetCwd);
+  const forkedSessionFile = forkCurrentSessionToCwd(
+    ctx.sessionManager,
+    targetCwd,
+  );
   const result = await ctx.switchSession(forkedSessionFile, {
     withSession: async (nextCtx) => {
       nextCtx.ui.notify(`cwd: ${nextCtx.cwd}`, "info");
+      scheduleTerminalRefresh(nextCtx);
     },
   });
 
@@ -63,7 +91,12 @@ function createCwdAutocompleteProvider(
   getCwd: () => string,
 ): AutocompleteProvider {
   return {
-    async getSuggestions(lines, cursorLine, cursorCol, options): Promise<AutocompleteSuggestions | null> {
+    async getSuggestions(
+      lines,
+      cursorLine,
+      cursorCol,
+      options,
+    ): Promise<AutocompleteSuggestions | null> {
       const line = lines[cursorLine] ?? "";
       const beforeCursor = line.slice(0, cursorCol);
       const arg = extractCwdCommandArgument(beforeCursor);
@@ -71,7 +104,10 @@ function createCwdAutocompleteProvider(
         return current.getSuggestions(lines, cursorLine, cursorCol, options);
       }
 
-      const items = directoryCompletionItems(arg, getCwd()).slice(0, MAX_COMPLETIONS);
+      const items = directoryCompletionItems(arg, getCwd()).slice(
+        0,
+        MAX_COMPLETIONS,
+      );
       if (items.length === 0) {
         return current.getSuggestions(lines, cursorLine, cursorCol, options);
       }
@@ -83,17 +119,28 @@ function createCwdAutocompleteProvider(
     },
 
     applyCompletion(lines, cursorLine, cursorCol, item, prefix) {
-      return current.applyCompletion(lines, cursorLine, cursorCol, item, prefix);
+      return current.applyCompletion(
+        lines,
+        cursorLine,
+        cursorCol,
+        item,
+        prefix,
+      );
     },
 
     shouldTriggerFileCompletion(lines, cursorLine, cursorCol) {
-      return current.shouldTriggerFileCompletion?.(lines, cursorLine, cursorCol) ?? true;
+      return (
+        current.shouldTriggerFileCompletion?.(lines, cursorLine, cursorCol) ??
+        true
+      );
     },
   };
 }
 
 function registerAutocomplete(ctx: ExtensionContext): void {
-  ctx.ui.addAutocompleteProvider((current) => createCwdAutocompleteProvider(current, () => ctx.cwd));
+  ctx.ui.addAutocompleteProvider((current) =>
+    createCwdAutocompleteProvider(current, () => ctx.cwd),
+  );
 }
 
 export default function (pi: ExtensionAPI): void {

@@ -1,6 +1,6 @@
 {
   "name": "@savagelands-net/pi-cwd",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Pi extension that changes the real session working directory with /cwd and /cd",
   "type": "module",
   "keywords": [
