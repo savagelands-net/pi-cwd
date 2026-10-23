@@ -105,4 +105,11 @@ jobs:
           else
             dist_tag=latest
           fi
-          npm publish --provenance --access public --tag "${dist_tag}"
+          publish_args=(--provenance --access public --tag "${dist_tag}")
+          if ! npm publish "${publish_args[@]}"; then
+            # npm's own message is a bare ENEEDAUTH; it hides the usual reason.
+            echo "::error::npm refused to publish. A plain ENEEDAUTH here"
+            echo "means this package has no trusted publisher for this"
+            echo "workflow yet: npmjs.com -> package -> Publishing."
+            exit 1
+          fi
